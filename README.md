@@ -119,6 +119,7 @@ result = add_round_key(state, round_key)
 
 - [AES Specification (FIPS 197)](https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.197.pdf)
 - [The Design of Rijndael](https://www.springer.com/gp/book/9783540425809)
+- [CryptoHack - Symmetric Cryptography](https://cryptohack.org/courses/symmetric/) - Interactive challenges and tutorials for symmetric encryption
 - AES Round Constants and S-box values follow the official NIST standard
 
 ## Educational Purpose
