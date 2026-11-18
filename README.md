@@ -1,134 +1,86 @@
 # Symmetric-Cryptography
 
-A Python implementation of the AES (Advanced Encryption Standard) decryption algorithm with detailed module breakdown for educational purposes.
+Solutions in Python to the [CryptoHack – Symmetric Cryptography](https://cryptohack.org/courses/symmetric/) course: a from-scratch AES-128 decryption, built step by step, and attacks against the ECB and CBC block cipher modes.
 
 ## Overview
 
-This project provides a complete implementation of AES-128 decryption, breaking down the algorithm into its core components. AES is a widely-used symmetric encryption standard that processes data in 128-bit blocks using a 128-bit key (for AES-128) through 10 rounds of transformations.
+The repository covers two parts of the course:
+
+1. **How AES works** – each step of AES (SubBytes, ShiftRows, MixColumns, AddRoundKey, key expansion) is written by hand, then all the steps are put together into a full AES-128 decryption.
+2. **Attacking block cipher modes** – scripts that talk to the CryptoHack challenge servers (`aes.cryptohack.org`) to break bad uses of ECB and CBC.
 
 ## Project Structure
 
-The project is organized into modular components, each implementing specific AES operations:
+### Part 1 – How AES works
 
-### Core Modules
+| File | Contents |
+|------|----------|
+| [`matrix.py`](matrix.py) | `bytes2matrix()` / `matrix2bytes()`: convert between 16 bytes and the 4×4 AES state |
+| [`add_round_key.py`](add_round_key.py) | `add_round_key()`: byte-by-byte XOR of the state with a round key |
+| [`sbox.py`](sbox.py) | `s_box` / `inv_s_box` tables and `sub_bytes()` (uses `s_box` by default, `inv_s_box` to decrypt) |
+| [`diffusion.py`](diffusion.py) | `shift_rows()`, `inv_shift_rows()`, `mix_columns()`, `inv_mix_columns()` |
+| [`aes_decrypt.py`](aes_decrypt.py) | `expand_key()` (key schedule) and `decrypt()`: full 10-round AES-128 decryption |
 
-- **`aes_decrypt.py`** - Main decryption engine
-  - Implements the complete AES-128 decryption algorithm
-  - Handles key expansion and round-based decryption
-  - Coordinates all transformation steps
-  - Entry point for decrypting ciphertext
+### Part 2 – Attacking block cipher modes
 
-- **`sbox.py`** - Substitution Box Implementation
-  - Contains S-box and inverse S-box lookup tables
-  - Implements `sub_bytes()` function for byte substitution using the inverse S-box
-  - Critical for the non-linear transformation in AES
-
-- **`diffusion.py`** - Diffusion Transformations
-  - `shift_rows()` - Performs cyclic row shifts on the state matrix
-  - `inv_shift_rows()` - Inverse operation for row shifting
-  - `mix_columns()` and `mix_single_column()` - Linear mixing of column data
-  - Provides diffusion to spread the effect of single bits across the data
-
-- **`add_round_key.py`** - Round Key Addition
-  - Implements `add_round_key()` function
-  - Performs XOR operation between state and round key
-  - Applied after key expansion and between rounds
-
-- **`matrix.py`** - Utility Functions
-  - `bytes2matrix()` - Converts 16-byte arrays to 4×4 matrices
-  - `matrix2bytes()` - Converts 4×4 matrices back to byte arrays
-  - Helper functions for data format conversion
+| File | Challenge | Attack |
+|------|-----------|--------|
+| [`ecb_oracle.py`](ecb_oracle.py) | **ECB Oracle** | Recovers the flag one byte at a time. In ECB, identical plaintext blocks give identical ciphertext blocks, so a guessed block is compared with the block that holds the unknown flag byte. |
+| [`ecb_cbc_wtf.py`](ecb_cbc_wtf.py) | **ECB CBC WTF** | The flag is encrypted in CBC, but the server decrypts in ECB. Each block is decrypted with ECB and XORed with the previous ciphertext block (the IV for the first one), which redoes CBC decryption by hand. |
+| [`flipping_cookies.py`](flipping_cookies.py) | **Flipping Cookie** | CBC bit-flipping: a forged IV and changes to the first ciphertext block turn `admin=False` into `admin=True` without knowing the key. |
 
 ## How AES Decryption Works
 
-AES decryption reverses the encryption process through the following steps:
+`decrypt()` in `aes_decrypt.py` runs the AES steps in reverse:
 
-1. **Key Expansion** - Expands the 128-bit master key into 11 round keys (10 rounds + initial)
-2. **Initial Round** - XOR ciphertext with the last round key
-3. **Main Rounds (9 rounds)** - For each round, apply in reverse order:
-   - Inverse Shift Rows
-   - Inverse Substitute Bytes (using inverse S-box)
-   - Add Round Key
-   - Inverse Mix Columns
-4. **Final Round** - Skip Mix Columns step and perform:
-   - Inverse Shift Rows
-   - Inverse Substitute Bytes
-   - Add Round Key
-
-## Usage
-
-### Basic Decryption
-
-```python
-from aes_decrypt import decrypt
-
-# 128-bit key (16 bytes)
-key = b'\xc3,\\\xa6\xb5\x80^\x0c\xdb\x8d\xa5z*\xb6\xfe\\'
-
-# 128-bit ciphertext (16 bytes)
-ciphertext = b'\xd1O\x14j\xa4+O\xb6\xa1\xc4\x08B)\x8f\x12\xdd'
-
-# Decrypt
-plaintext = decrypt(key, ciphertext)
-print(plaintext)
-```
-
-### Testing Individual Components
-
-```python
-# Test S-box substitution
-from sbox import sub_bytes, state
-
-result = sub_bytes(state, sbox=inv_s_box)
-print(result)
-
-# Test add_round_key
-from add_round_key import add_round_key
-
-state = [[206, 243, 61, 34], ...]
-round_key = [[173, 129, 68, 82], ...]
-result = add_round_key(state, round_key)
-```
-
-## Technical Details
-
-### Data Representation
-
-- **State Matrix** - 4×4 matrix of bytes representing the current data being processed
-- **Round Keys** - Derived from the master key through key expansion
-- **Block Size** - 128 bits (16 bytes)
-- **Key Size** - 128 bits (16 bytes for AES-128)
-- **Number of Rounds** - 10 for AES-128
-
-### Key Operations
+1. **Key expansion** – the 128-bit key becomes 11 round keys.
+2. **Initial step** – XOR the ciphertext with the last round key.
+3. **Rounds 9 → 1** – `InvShiftRows` → `InvSubBytes` → `AddRoundKey` → `InvMixColumns`.
+4. **Last round** – same as the others but without `InvMixColumns`.
 
 | Operation | Purpose |
 |-----------|---------|
-| SubBytes | Non-linear byte-level substitution |
-| ShiftRows | Circular rotation of matrix rows |
-| MixColumns | Linear transformation of matrix columns |
-| AddRoundKey | XOR with round key material |
-| KeyExpansion | Generate round keys from master key |
+| SubBytes | Non-linear substitution of each byte (confusion) |
+| ShiftRows | Circular shift of the state rows (diffusion) |
+| MixColumns | Linear mixing of each column in GF(2⁸) (diffusion) |
+| AddRoundKey | XOR with the round key |
+| KeyExpansion | Builds the round keys from the master key |
+
+## Usage
+
+Each file is a standalone script that prints its result when run:
+
+```bash
+# Part 1 – AES
+python3 aes_decrypt.py        # decrypts the challenge ciphertext and prints the flag
+python3 sbox.py
+python3 diffusion.py
+python3 add_round_key.py
+
+# Part 2 – attacks (need Internet access to aes.cryptohack.org)
+python3 ecb_oracle.py
+python3 ecb_cbc_wtf.py
+python3 flipping_cookies.py
+```
+
+> Note: the Part 1 modules print the challenge results at the top level. Importing them (e.g. `from aes_decrypt import decrypt`) also prints these results.
 
 ## Requirements
 
-- Python 3.x
-- No external dependencies
+- Python 3.9+
+- [`requests`](https://pypi.org/project/requests/) for the Part 2 scripts:
+
+```bash
+pip install requests
+```
 
 ## References
 
+- [CryptoHack – Symmetric Cryptography](https://cryptohack.org/courses/symmetric/)
 - [AES Specification (FIPS 197)](https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.197.pdf)
-- [The Design of Rijndael](https://www.springer.com/gp/book/9783540425809)
-- [CryptoHack - Symmetric Cryptography](https://cryptohack.org/courses/symmetric/) - Interactive challenges and tutorials for symmetric encryption
-- AES Round Constants and S-box values follow the official NIST standard
+- [The Design of Rijndael](https://link.springer.com/book/10.1007/978-3-662-60769-5)
+- [Block cipher modes of operation (Wikipedia)](https://en.wikipedia.org/wiki/Block_cipher_mode_of_operation)
 
-## Educational Purpose
+## Disclaimer
 
-This implementation is designed for educational purposes to understand how AES decryption works at a fundamental level. Each module isolates specific operations, making it easier to study individual components of the algorithm.
-
-## Notes
-
-- This is an AES-128 decryption implementation (10 rounds)
-- The code uses the standard AES S-box and inverse S-box values
-- Key expansion follows the AES key schedule algorithm
-- Not optimized for production use; focus is on clarity and education
+This code is for learning only. It is not optimized or hardened and must not be used to protect real data. The attack scripts only target the CryptoHack challenge servers, which exist for this purpose.
